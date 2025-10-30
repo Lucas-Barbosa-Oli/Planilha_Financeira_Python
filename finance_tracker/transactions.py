@@ -38,3 +38,33 @@ def list_transactions():
             print(f"ID: {row[0]} | Tipo: {row[1]} | Descrição: {row[2]} | Categoria: {row[3]} | Valor: R${row[4]:.2f} | Data: {row[5]}")
 
     conn.close()
+
+# --- EXCLUIR UMA TRANSAÇÃO POR ID ---
+def deletar_transacao_por_id(id):
+    """Exclui uma transação específica pelo ID."""
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM transactions WHERE id = ?', (id,))
+    conn.commit()
+
+    if cursor.rowcount > 0:
+        print(f"✅ Transação com ID {id} excluída com sucesso.")
+    else:
+        print(f"⚠️ Nenhuma transação encontrada com o ID {id}.")
+
+    conn.close()
+
+
+# --- LIMPAR TODAS AS TRANSAÇÕES ---
+def limpar_todas_transacoes():
+    """Remove todas as transações do banco."""
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM transactions')
+    conn.commit()
+    conn.close()
+
+    print("🗑️ Todas as transações foram removidas com sucesso.")
+
