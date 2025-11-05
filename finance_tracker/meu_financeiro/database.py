@@ -4,24 +4,24 @@ import os
 # Caminho do banco de dados
 DB_PATH = os.path.join("data", "finance.db")
 
-def create_connection():
+def criar_conexao():
     """Cria (ou conecta) ao banco de dados SQLite."""
     conn = sqlite3.connect(DB_PATH)
     return conn
 
-def create_table():
+def criar_tabela():
     """Cria a tabela de transações, se ainda não existir."""
-    conn = create_connection()
+    conn = criar_conexao()
     cursor = conn.cursor()
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS transactions (
+        CREATE TABLE IF NOT EXISTS transacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,            -- 'receita' ou 'despesa'
-            description TEXT NOT NULL,
-            category TEXT,
-            amount REAL NOT NULL,
-            date TEXT NOT NULL             -- formato: YYYY-MM-DD
+            tipo TEXT NOT NULL,             -- 'receita' ou 'despesa'
+            descricao TEXT NOT NULL,
+            categoria TEXT,
+            valor REAL NOT NULL,
+            data TEXT NOT NULL              -- formato: YYYY-MM-DD
         )
     """)
 
@@ -30,5 +30,5 @@ def create_table():
 
 if __name__ == "__main__":
     print("Iniciando criação do banco de dados...")
-    create_table()
+    criar_tabela()
     print("Banco de dados criado com sucesso!")

@@ -6,50 +6,31 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from transactions import (
-    add_transaction,
-    list_transactions,
+    adicionar_transacao,
+    listar_transacoes,
     deletar_transacao_por_id,
-    limpar_todas_transacoes
+    limpar_todas_transacoes,
+    editar_transacao
 )
 
+from database import criar_tabela, criar_conexao
 
-# ==============================
-# CONFIGURAÇÃO DO BANCO DE DADOS
-# ==============================
-def conectar_banco():
-    conexao = sqlite3.connect("data/finance.db")
-    cursor = conexao.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS transacoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT NOT NULL,
-            categoria TEXT,
-            descricao TEXT,
-            valor REAL NOT NULL,
-            data TEXT NOT NULL
-        )
-    ''')
-    conexao.commit()
-    return conexao
 
 # ==============================
 # FUNÇÕES DE INSERÇÃO E VISUALIZAÇÃO
 # ==============================
-def adicionar_transacao(conexao, tipo):
-    categoria = input("Categoria: ")
+def adicionar_transacao_menu():
+    tipo = input("Tipo (receita/despesa): ").lower()
     descricao = input("Descrição: ")
+    categoria = input("Categoria: ")
     valor = float(input("Valor: "))
     data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    cursor = conexao.cursor()
-    cursor.execute('''
-        INSERT INTO transacoes (tipo, categoria, descricao, valor, data)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (tipo, categoria, descricao, valor, data))
-    conexao.commit()
-    print(f"{tipo.capitalize()} adicionada com sucesso!\n")
+    adicionar_transacao(tipo, descricao, categoria, valor, data)
 
-def listar_transacoes(conexao):
+
+def listar_transacoes_menu():
+    conexao = criar_conexao()
     cursor = conexao.cursor()
     cursor.execute("SELECT * FROM transacoes ORDER BY data DESC")
     transacoes = cursor.fetchall()
@@ -63,27 +44,28 @@ def listar_transacoes(conexao):
         print(f"[{t[0]}] {t[1].capitalize()} | {t[2]} | {t[3]} | R$ {t[4]:.2f} | {t[5]}")
     print()
 
-def calcular_saldo(conexao):
-    cursor = conexao.cursor()
-    cursor.execute("SELECT SUM(valor) FROM transacoes WHERE tipo = 'receita'")
-    receitas = cursor.fetchone()[0] or 0
-
-    cursor.execute("SELECT SUM(valor) FROM transacoes WHERE tipo = 'despesa'")
-    despesas = cursor.fetchone()[0] or 0
-
-    saldo = receitas - despesas
-    print(f"\n💰 Saldo atual: R$ {saldo:.2f}\n")
 
 # ==============================
-# FUNÇÕES DE FILTRO E ANÁLISE
+# FUNÇÃO DE FILTROS + EXPORTAÇÃO + GRÁFICOS
 # ==============================
-def obter_transacoes_filtradas(conexao, filtro=None):
-    cursor = conexao.cursor()
+def filtrar_transacoes_menu():
+    """Permite filtrar e exportar transações com gráficos e resumo."""
+    conn = criar_conexao()
+    cursor = conn.cursor()
 
-    if filtro == "tipo":
+    print("\n=== FILTROS DISPONÍVEIS ===")
+    print("1 - Por tipo (receita/despesa)")
+    print("2 - Por mês e ano")
+    print("3 - Por categoria")
+    print("4 - Por intervalo de datas")
+    print("0 - Voltar")
+    opcao = input("Escolha uma opção: ")
+
+    if opcao == "1":
         tipo = input("Digite o tipo (receita/despesa): ").lower()
         cursor.execute("SELECT * FROM transacoes WHERE tipo = ? ORDER BY data DESC", (tipo,))
-    elif filtro == "mes":
+
+    elif opcao == "2":
         mes = input("Digite o mês (ex: 03): ")
         ano = input("Digite o ano (ex: 2025): ")
         cursor.execute("""
@@ -91,23 +73,64 @@ def obter_transacoes_filtradas(conexao, filtro=None):
             WHERE strftime('%m', data) = ? AND strftime('%Y', data) = ?
             ORDER BY data DESC
         """, (mes, ano))
-    elif filtro == "categoria":
+
+    elif opcao == "3":
         categoria = input("Digite a categoria: ")
         cursor.execute("SELECT * FROM transacoes WHERE categoria = ? ORDER BY data DESC", (categoria,))
+
+    elif opcao == "4":
+        data_inicio = input("Data inicial (YYYY-MM-DD): ")
+        data_fim = input("Data final (YYYY-MM-DD): ")
+        cursor.execute("""
+            SELECT * FROM transacoes
+            WHERE date(data) BETWEEN date(?) AND date(?)
+            ORDER BY data ASC
+        """, (data_inicio, data_fim))
+
+    elif opcao == "0":
+        conn.close()
+        return
+
     else:
-        cursor.execute("SELECT * FROM transacoes ORDER BY data DESC")
+        print("❌ Opção inválida.")
+        conn.close()
+        return
 
-    return cursor.fetchall()
+    transacoes = cursor.fetchall()
+    conn.close()
 
-def mostrar_resumo(transacoes):
-    total_receitas = sum(t[4] for t in transacoes if t[1] == "receita")
-    total_despesas = sum(t[4] for t in transacoes if t[1] == "despesa")
-    saldo = total_receitas - total_despesas
+    if not transacoes:
+        print("\n⚠️ Nenhuma transação encontrada com os filtros aplicados.\n")
+        return
 
+    # Exibe resultados
+    print("\n=== RESULTADO DO FILTRO ===")
+    total_receita = total_despesa = 0
+    for t in transacoes:
+        print(f"[{t[0]}] {t[1].capitalize()} | {t[2]} | {t[3]} | R$ {t[4]:.2f} | {t[5]}")
+        if t[1] == "receita":
+            total_receita += t[4]
+        elif t[1] == "despesa":
+            total_despesa += t[4]
+
+    saldo = total_receita - total_despesa
     print("\n===== RESUMO =====")
-    print(f"Total de Receitas: R$ {total_receitas:.2f}")
-    print(f"Total de Despesas: R$ {total_despesas:.2f}")
+    print(f"Total de Receitas: R$ {total_receita:.2f}")
+    print(f"Total de Despesas: R$ {total_despesa:.2f}")
     print(f"Saldo Final: R$ {saldo:.2f}\n")
+
+    # Pergunta sobre exportação
+    print("Deseja exportar o resultado?")
+    print("1 - CSV  |  2 - PDF  |  3 - Gráfico  |  0 - Não exportar")
+    escolha = input("Escolha uma opção: ")
+
+    if escolha == "1":
+        exportar_csv(transacoes)
+    elif escolha == "2":
+        exportar_pdf(transacoes)
+    elif escolha == "3":
+        gerar_graficos(transacoes)
+
 
 # ==============================
 # FUNÇÕES DE EXPORTAÇÃO
@@ -116,9 +139,10 @@ def exportar_csv(transacoes):
     nome_arquivo = f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     with open(nome_arquivo, "w", newline="", encoding="utf-8") as arquivo:
         writer = csv.writer(arquivo)
-        writer.writerow(["ID", "Tipo", "Categoria", "Descrição", "Valor", "Data"])
+        writer.writerow(["ID", "Tipo", "Descrição", "Categoria", "Valor", "Data"])
         writer.writerows(transacoes)
-    print(f"Relatório exportado para {nome_arquivo}\n")
+    print(f"\n✅ Relatório exportado para {nome_arquivo}\n")
+
 
 def exportar_pdf(transacoes):
     nome_arquivo = f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -140,86 +164,90 @@ def exportar_pdf(transacoes):
             c.setFont("Helvetica", 10)
 
     c.save()
-    print(f"Relatório exportado para {nome_arquivo}\n")
+    print(f"\n✅ Relatório exportado para {nome_arquivo}\n")
+
 
 # ==============================
-# FUNÇÕES DE GRÁFICOS
+# FUNÇÃO DE GRÁFICOS
 # ==============================
-def gerar_graficos(conexao):
-    cursor = conexao.cursor()
-    cursor.execute("SELECT categoria, SUM(valor) FROM transacoes WHERE tipo = 'despesa' GROUP BY categoria")
-    dados = cursor.fetchall()
+def gerar_graficos(transacoes):
+    categorias = {}
+    for t in transacoes:
+        cat = t[3]
+        valor = t[4]
+        if cat not in categorias:
+            categorias[cat] = 0
+        categorias[cat] += valor
 
-    if not dados:
-        print("Nenhuma despesa para exibir gráfico.\n")
-        return
-
-    categorias = [d[0] for d in dados]
-    valores = [d[1] for d in dados]
-
-    plt.figure(figsize=(7,5))
-    plt.bar(categorias, valores)
-    plt.title("Despesas por Categoria")
+    plt.figure(figsize=(7, 5))
+    plt.bar(categorias.keys(), categorias.values())
+    plt.title("Despesas/Receitas por Categoria")
     plt.xlabel("Categoria")
     plt.ylabel("Valor (R$)")
     plt.xticks(rotation=30)
     plt.tight_layout()
     plt.show()
 
+
+# ==============================
+# SALDO
+# ==============================
+def calcular_saldo():
+    conexao = criar_conexao()
+    cursor = conexao.cursor()
+
+    cursor.execute("SELECT SUM(valor) FROM transacoes WHERE tipo = 'receita'")
+    receitas = cursor.fetchone()[0] or 0
+
+    cursor.execute("SELECT SUM(valor) FROM transacoes WHERE tipo = 'despesa'")
+    despesas = cursor.fetchone()[0] or 0
+
+    saldo = receitas - despesas
+    print(f"\n💰 Saldo atual: R$ {saldo:.2f}\n")
+    conexao.close()
+
+
 # ==============================
 # MENU PRINCIPAL
 # ==============================
 def menu():
-    conexao = conectar_banco()
+    criar_tabela()
 
     while True:
-        print("===== MENU FINANCEIRO =====")
-        print("1 - Adicionar Receita")
-        print("2 - Adicionar Despesa")
-        print("3 - Listar Transações")
-        print("4 - Ver Saldo")
-        print("5 - Filtrar Transações")
-        print("6 - Exportar Relatório (CSV/PDF)")
-        print("7 - Gerar Gráfico de Despesas")
-        print("8 - Excluir Transação por ID")
-        print("9 - Limpar Todas as Transações")
-        print("0 - Sair")
+        print("""
+===== MENU FINANCEIRO =====
+1 - Adicionar transação
+2 - Listar transações
+3 - Ver saldo
+4 - Excluir transação por ID
+5 - Limpar todas as transações
+6 - Filtrar/Exportar/Gráficos
+0 - Sair
+============================
+        """)
         opcao = input("Escolha uma opção: ")
 
         if opcao == "1":
-            adicionar_transacao(conexao, "receita")
+            adicionar_transacao_menu()
         elif opcao == "2":
-            adicionar_transacao(conexao, "despesa")
+            listar_transacoes_menu()
         elif opcao == "3":
-            listar_transacoes(conexao)
+            calcular_saldo()
         elif opcao == "4":
-            calcular_saldo(conexao)
+            id_transacao = input("Digite o ID da transação que deseja excluir: ")
+            deletar_transacao_por_id(id_transacao)
         elif opcao == "5":
-            filtro = input("Filtrar por (tipo/mes/categoria ou enter para todos): ").lower()
-            transacoes = obter_transacoes_filtradas(conexao, filtro)
-            for t in transacoes:
-                print(f"[{t[0]}] {t[1].capitalize()} | {t[2]} | {t[3]} | R$ {t[4]:.2f} | {t[5]}")
-            mostrar_resumo(transacoes)
+            confirmacao = input("Tem certeza que deseja limpar todas as transações? (s/n): ").lower()
+            if confirmacao == "s":
+                limpar_todas_transacoes()
         elif opcao == "6":
-            transacoes = obter_transacoes_filtradas(conexao)
-            print("1 - Exportar para CSV\n2 - Exportar para PDF")
-            escolha = input("Escolha o formato: ")
-            if escolha == "1":
-                exportar_csv(transacoes)
-            elif escolha == "2":
-                exportar_pdf(transacoes)
-        elif opcao == "7":
-            gerar_graficos(conexao)
-        elif opcao == "8":
-            deletar_transacao_por_id(conexao)
-        elif opcao == "9":
-            limpar_todas_transacoes(conexao)
+            filtrar_transacoes_menu()
         elif opcao == "0":
             print("Saindo... Até logo!")
-            conexao.close()
             break
         else:
             print("Opção inválida!\n")
 
-if _name_ == "_main_":
+
+if __name__ == "__main__":
     menu()
