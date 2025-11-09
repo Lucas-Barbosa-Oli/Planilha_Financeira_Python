@@ -1,0 +1,23 @@
+{
+  "transactions": [],
+  "categories": {
+    "receita": [
+      "Salário",
+      "Freelance",
+      "Investimentos",
+      "Outros Ganhos"
+    ],
+    "despesa": [
+      "Alimentação",
+      "Transporte",
+      "Moradia",
+      "Saúde",
+      "Educação",
+      "Lazer",
+      "Contas",
+      "Compras",
+      "Outros Gastos"
+    ]
+  },
+  "last_updated": "2025-11-09T03:40:43.914297"
+}
