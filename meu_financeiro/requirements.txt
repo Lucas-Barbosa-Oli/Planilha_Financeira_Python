@@ -1,0 +1,22 @@
+# Não há dependências externas
+# Python 3.8+ apenas com biblioteca padrão
+```
+
+---
+
+## 📋 INSTRUÇÕES DE USO
+
+### 1️⃣ Criar estrutura de pastas:
+
+```bash
+mkdir -p finance_tracker/{models,services,utils,views,data}
+cd finance_tracker
+```
+
+### 2️⃣ Criar os arquivos `__init__.py`:
+
+```bash
+touch models/__init__.py
+touch services/__init__.py
+touch utils/__init__.py
+touch views/__init__.py
